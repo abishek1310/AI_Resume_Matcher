@@ -8,6 +8,11 @@ import requests
 from collections import Counter
 import json
 
+
+if 'visitor_count' not in st.session_state:
+    st.session_state.visitor_count = 0
+    st.session_state.visitor_count += 1
+
 # Page config
 st.set_page_config(
     page_title="AI Resume Matcher",
@@ -403,6 +408,9 @@ def main():
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
+
+        st.sidebar.metric("Visitors Today", st.session_state.visitor_count)
+
         
         search_role = st.selectbox(
             "Target Role",
