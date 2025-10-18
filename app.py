@@ -1,681 +1,667 @@
-"""
-AI Resume-Job Matcher - Beginner Friendly Version
-Complete working application for VS Code
-"""
-
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 import re
-from datetime import datetime
+import requests
+from collections import Counter
+import json
 
-# Page configuration - this sets up the browser tab
+# Page config
 st.set_page_config(
-    page_title="AI Resume-Job Matcher",
+    page_title="AI Resume Matcher",
     page_icon="🎯",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Custom styling to make it look professional
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
         font-size: 3rem;
         font-weight: bold;
-        background: linear-gradient(120deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-align: center;
-        padding: 1rem 0;
+        padding: 1rem;
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
     }
     .skill-badge {
         display: inline-block;
-        padding: 0.25rem 0.75rem;
+        padding: 0.3rem 0.8rem;
         margin: 0.2rem;
-        background-color: #e8f4fd;
         border-radius: 15px;
+        background: #667eea;
+        color: white;
         font-size: 0.9rem;
-        color: #1e3d59;
     }
-    .success-badge {
-        background-color: #d4f4dd;
-        color: #0d7a2e;
-    }
-    .warning-badge {
-        background-color: #ffe4e1;
-        color: #d32f2f;
-    }
-    .job-card {
-        padding: 1.5rem;
-        border-radius: 10px;
-        background-color: #f8f9fa;
-        border-left: 4px solid #667eea;
-        margin-bottom: 1rem;
-    }
-    .metric-card {
-        background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    .match-score {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state (this stores data between reruns)
+# Initialize session state
 if 'resume_text' not in st.session_state:
     st.session_state.resume_text = ""
-if 'resume_skills' not in st.session_state:
-    st.session_state.resume_skills = []
-if 'page' not in st.session_state:
-    st.session_state.page = "Upload Resume"
+if 'jobs' not in st.session_state:
+    st.session_state.jobs = []
+if 'user_skills' not in st.session_state:
+    st.session_state.user_skills = set()
 
+# ==================== SKILL EXTRACTION ====================
 def extract_skills(text):
-    """
-    Extract skills from resume text
-    This is a simple version using keyword matching
-    """
+    """Extract skills from text using comprehensive skill database"""
     text_lower = text.lower()
     
-    # Define skills to look for (you can add more!)
-    all_skills = {
-        # Programming Languages
-        'python': ['python', 'py'],
-        'r': ['r programming', 'r language', ' r ', 'r,', 'r.'],
-        'sql': ['sql', 'mysql', 'postgresql', 'sqlite'],
-        'java': ['java', 'jvm'],
-        'javascript': ['javascript', 'js', 'node.js', 'nodejs'],
-        'c++': ['c++', 'cpp'],
-        
-        # Data Science & ML
-        'machine learning': ['machine learning', 'ml ', 'ml,', 'ml.'],
-        'deep learning': ['deep learning', 'neural network', 'dl '],
-        'data analysis': ['data analysis', 'data analytics', 'analytical'],
-        'statistics': ['statistics', 'statistical analysis', 'statistical'],
-        'data visualization': ['visualization', 'data viz', 'visualizing'],
-        'nlp': ['nlp', 'natural language processing', 'text mining'],
-        'computer vision': ['computer vision', 'cv ', 'image processing'],
-        
-        # Tools & Frameworks
-        'tensorflow': ['tensorflow', 'tf '],
-        'pytorch': ['pytorch', 'torch'],
-        'scikit-learn': ['scikit-learn', 'sklearn', 'sci-kit'],
-        'pandas': ['pandas'],
-        'numpy': ['numpy'],
-        'matplotlib': ['matplotlib'],
-        'tableau': ['tableau'],
-        'power bi': ['power bi', 'powerbi'],
-        'excel': ['excel', 'spreadsheet'],
-        
-        # Cloud & DevOps
-        'aws': ['aws', 'amazon web services', 'ec2', 's3'],
-        'azure': ['azure', 'microsoft azure'],
-        'gcp': ['gcp', 'google cloud', 'google cloud platform'],
-        'docker': ['docker', 'containerization'],
-        'kubernetes': ['kubernetes', 'k8s'],
-        'git': ['git', 'github', 'gitlab', 'version control'],
-        
-        # Databases
-        'mongodb': ['mongodb', 'mongo'],
-        'redis': ['redis'],
-        'elasticsearch': ['elasticsearch', 'elastic'],
-        
-        # Big Data
-        'spark': ['spark', 'pyspark', 'apache spark'],
-        'hadoop': ['hadoop', 'hdfs', 'mapreduce'],
-        'kafka': ['kafka', 'streaming'],
-        'airflow': ['airflow', 'apache airflow'],
-        
-        # Soft Skills
-        'agile': ['agile', 'scrum', 'sprint'],
-        'communication': ['communication', 'communicate', 'presenting'],
-        'teamwork': ['team', 'collaboration', 'collaborative'],
-        'problem solving': ['problem solving', 'analytical thinking', 'troubleshoot'],
+    skill_categories = {
+        'Programming Languages': [
+            'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'ruby', 
+            'go', 'rust', 'swift', 'kotlin', 'php', 'scala', 'r', 'matlab'
+        ],
+        'Data Science & ML': [
+            'machine learning', 'deep learning', 'neural networks', 'nlp', 
+            'computer vision', 'tensorflow', 'pytorch', 'scikit-learn', 'keras',
+            'pandas', 'numpy', 'matplotlib', 'seaborn', 'jupyter'
+        ],
+        'Data Engineering': [
+            'sql', 'nosql', 'postgresql', 'mysql', 'mongodb', 'redis',
+            'apache spark', 'hadoop', 'kafka', 'airflow', 'etl', 'data pipeline',
+            'snowflake', 'bigquery', 'redshift'
+        ],
+        'Cloud & DevOps': [
+            'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'ci/cd', 'jenkins',
+            'terraform', 'ansible', 'linux', 'bash', 'git', 'github'
+        ],
+        'Web Development': [
+            'react', 'angular', 'vue', 'node.js', 'express', 'django', 'flask',
+            'fastapi', 'rest api', 'graphql', 'html', 'css', 'bootstrap', 'tailwind'
+        ],
+        'Data Analysis': [
+            'excel', 'tableau', 'power bi', 'looker', 'data visualization',
+            'statistics', 'a/b testing', 'hypothesis testing', 'regression'
+        ],
+        'Soft Skills': [
+            'communication', 'teamwork', 'leadership', 'problem solving',
+            'analytical thinking', 'project management', 'agile', 'scrum'
+        ]
     }
     
-    found_skills = []
-    for skill, keywords in all_skills.items():
-        for keyword in keywords:
-            if keyword in text_lower and skill not in found_skills:
-                found_skills.append(skill)
-                break
+    found_skills = {category: [] for category in skill_categories}
+    all_skills = set()
     
-    return found_skills
+    for category, skills in skill_categories.items():
+        for skill in skills:
+            if skill in text_lower:
+                found_skills[category].append(skill)
+                all_skills.add(skill)
+    
+    return found_skills, all_skills
 
-def get_sample_jobs():
-    """
-    Returns sample job postings
-    In a real app, this would fetch from a database or API
-    """
-    return [
+# ==================== JOB API INTEGRATIONS ====================
+def fetch_remoteok_jobs(search_term="data"):
+    """Fetch jobs from RemoteOK API"""
+    try:
+        url = "https://remoteok.com/api"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            jobs_data = response.json()[1:]  # Skip first item (metadata)
+            processed_jobs = []
+            
+            for job in jobs_data[:30]:  # Limit to 30 jobs
+                if search_term.lower() in job.get('position', '').lower() or \
+                   search_term.lower() in job.get('description', '').lower():
+                    processed_jobs.append({
+                        'title': job.get('position', 'N/A'),
+                        'company': job.get('company', 'N/A'),
+                        'location': job.get('location', 'Remote'),
+                        'description': job.get('description', '')[:500],
+                        'salary': f"${job.get('salary_min', 'N/A')} - ${job.get('salary_max', 'N/A')}" if job.get('salary_min') else 'Not specified',
+                        'url': job.get('url', '#'),
+                        'posted_date': 'Recent',
+                        'source': 'RemoteOK'
+                    })
+            
+            return processed_jobs
+        return []
+    except Exception as e:
+        st.warning(f"RemoteOK API error: {str(e)}")
+        return []
+
+def fetch_github_jobs(search_term="data"):
+    """Fetch jobs from GitHub Jobs API alternative"""
+    # Note: GitHub Jobs API was deprecated, using mock data for demonstration
+    mock_jobs = [
         {
-            'id': 1,
-            'title': '🎯 Data Scientist - Entry Level',
-            'company': 'TechCorp Boston',
-            'location': 'Boston, MA',
-            'type': 'Full-time',
-            'experience': '0-2 years',
-            'salary': '$75,000 - $95,000',
-            'description': 'Join our data science team to build ML models and derive insights from data.',
-            'required_skills': ['python', 'sql', 'machine learning', 'statistics', 'data analysis'],
-            'nice_to_have': ['tensorflow', 'aws', 'docker'],
-            'posted': '2 days ago'
-        },
-        {
-            'id': 2,
-            'title': '📊 Data Analyst Co-op',
-            'company': 'Analytics Pro',
-            'location': 'Cambridge, MA',
-            'type': 'Co-op',
-            'experience': 'Students welcome',
-            'salary': '$25-30/hour',
-            'description': 'Perfect co-op opportunity for students interested in data analytics.',
-            'required_skills': ['sql', 'excel', 'python', 'data visualization'],
-            'nice_to_have': ['tableau', 'power bi', 'statistics'],
-            'posted': '1 day ago'
-        },
-        {
-            'id': 3,
-            'title': '🔧 Data Engineer',
-            'company': 'DataFlow Inc',
-            'location': 'Boston, MA (Remote)',
-            'type': 'Full-time',
-            'experience': '2-4 years',
-            'salary': '$95,000 - $120,000',
-            'description': 'Build and maintain data pipelines for our growing platform.',
-            'required_skills': ['python', 'sql', 'spark', 'airflow', 'docker'],
-            'nice_to_have': ['aws', 'kubernetes', 'kafka'],
-            'posted': '3 days ago'
-        },
-        {
-            'id': 4,
-            'title': '🤖 Machine Learning Engineer',
-            'company': 'AI Innovations',
+            'title': 'Data Scientist',
+            'company': 'Tech Corp',
             'location': 'Remote',
-            'type': 'Full-time',
-            'experience': '3-5 years',
-            'salary': '$110,000 - $140,000',
-            'description': 'Deploy ML models to production and build scalable AI systems.',
-            'required_skills': ['python', 'machine learning', 'deep learning', 'docker', 'git'],
-            'nice_to_have': ['kubernetes', 'pytorch', 'tensorflow', 'aws'],
-            'posted': '1 week ago'
+            'description': 'Looking for data scientist with Python, ML, and SQL skills.',
+            'salary': '$80,000 - $120,000',
+            'url': 'https://example.com',
+            'posted_date': '2 days ago',
+            'source': 'GitHub Jobs'
         },
         {
-            'id': 5,
-            'title': '📈 Business Intelligence Analyst',
-            'company': 'Finance Corp',
+            'title': 'Data Engineer',
+            'company': 'DataFlow Inc',
             'location': 'Boston, MA',
-            'type': 'Full-time',
-            'experience': '1-3 years',
-            'salary': '$70,000 - $90,000',
-            'description': 'Transform business data into actionable insights.',
-            'required_skills': ['sql', 'excel', 'tableau', 'data analysis'],
-            'nice_to_have': ['python', 'power bi', 'statistics'],
-            'posted': '4 days ago'
-        },
-        {
-            'id': 6,
-            'title': '🎓 Data Science Intern',
-            'company': 'StartupXYZ',
-            'location': 'Boston, MA',
-            'type': 'Internship',
-            'experience': 'Students',
-            'salary': '$20-25/hour',
-            'description': 'Learn and grow with our data science team.',
-            'required_skills': ['python', 'statistics', 'sql'],
-            'nice_to_have': ['machine learning', 'pandas', 'numpy'],
-            'posted': 'Today'
+            'description': 'Data engineer needed for ETL pipeline development with Spark and Airflow.',
+            'salary': '$90,000 - $130,000',
+            'url': 'https://example.com',
+            'posted_date': '1 week ago',
+            'source': 'GitHub Jobs'
         }
     ]
+    return [job for job in mock_jobs if search_term.lower() in job['title'].lower()]
 
-def calculate_match_score(resume_skills, job):
-    """
-    Calculate how well a resume matches a job
-    Returns a score from 0-100
-    """
-    if not resume_skills:
-        return 0, [], []
+def fetch_all_jobs(search_term="data"):
+    """Aggregate jobs from all sources"""
+    all_jobs = []
     
-    required = set(job['required_skills'])
-    nice = set(job.get('nice_to_have', []))
-    user_skills = set(resume_skills)
+    with st.spinner("🔍 Fetching jobs from RemoteOK..."):
+        all_jobs.extend(fetch_remoteok_jobs(search_term))
     
-    # Find matches
-    required_matches = required.intersection(user_skills)
-    nice_matches = nice.intersection(user_skills)
+    with st.spinner("🔍 Fetching jobs from GitHub..."):
+        all_jobs.extend(fetch_github_jobs(search_term))
     
-    # Calculate score
-    if len(required) > 0:
-        required_score = len(required_matches) / len(required) * 70
-    else:
-        required_score = 0
-    
-    if len(nice) > 0:
-        nice_score = len(nice_matches) / len(nice) * 30
-    else:
-        nice_score = 0
-    
-    total_score = required_score + nice_score
-    
-    # Find missing skills
-    missing_skills = list(required - user_skills)
-    
-    return min(100, total_score), list(required_matches), missing_skills
+    return all_jobs
 
-# MAIN APPLICATION
-def main():
-    # Header
-    st.markdown('<h1 class="main-header">🎯 AI Resume-Job Matcher</h1>', unsafe_allow_html=True)
-    st.markdown("### Find your perfect job match in seconds!")
+# ==================== SMART MATCHING ALGORITHM ====================
+def calculate_match_score(user_skills, job_description):
+    """Calculate match score using advanced algorithm"""
+    job_lower = job_description.lower()
     
-    # Sidebar Navigation
-    with st.sidebar:
-        st.markdown("## 📱 Navigation")
-        
-        # Page selection
-        pages = ["Upload Resume", "Find Jobs", "My Matches", "Skills Analysis"]
-        selected_page = st.radio("Go to:", pages, index=pages.index(st.session_state.page))
-        st.session_state.page = selected_page
-        
-        st.markdown("---")
-        
-        # Quick Stats
-        if st.session_state.resume_skills:
-            st.markdown("### 📊 Your Stats")
-            st.success(f"✅ Resume Uploaded")
-            st.info(f"🛠️ {len(st.session_state.resume_skills)} skills found")
-            
-            # Show skills
-            st.markdown("**Your Skills:**")
-            for skill in st.session_state.resume_skills[:5]:
-                st.write(f"• {skill}")
-            if len(st.session_state.resume_skills) > 5:
-                st.write(f"... and {len(st.session_state.resume_skills)-5} more")
-        else:
-            st.warning("📄 No resume uploaded yet")
-        
-        st.markdown("---")
-        st.markdown("### 💡 Tips")
-        st.info(
-            "**Pro Tip:** Include technical skills, "
-            "programming languages, and tools you've "
-            "used in your resume for better matches!"
-        )
+    # Extract skills from job description
+    job_skill_dict, job_skills = extract_skills(job_description)
     
-    # Main Content Area
-    if st.session_state.page == "Upload Resume":
-        upload_resume_page()
-    elif st.session_state.page == "Find Jobs":
-        find_jobs_page()
-    elif st.session_state.page == "My Matches":
-        my_matches_page()
-    elif st.session_state.page == "Skills Analysis":
-        skills_analysis_page()
+    # Calculate various match factors
+    exact_matches = len(user_skills & job_skills)
+    total_required = len(job_skills) if job_skills else 1
+    
+    # Skill match score (60% weight)
+    skill_score = (exact_matches / total_required) * 60
+    
+    # Experience level matching (20% weight)
+    experience_keywords = ['senior', 'lead', 'junior', 'entry', 'mid-level']
+    experience_score = 20  # Default neutral score
+    
+    # Keyword density (20% weight)
+    keyword_score = min((exact_matches / 5) * 20, 20)  # Cap at 20
+    
+    total_score = skill_score + experience_score + keyword_score
+    
+    return min(round(total_score, 1), 100), exact_matches, len(job_skills)
 
-def upload_resume_page():
-    """Page for uploading resume"""
-    st.header("📄 Upload Your Resume")
+def rank_jobs(jobs, user_skills):
+    """Rank jobs by match score"""
+    ranked_jobs = []
     
-    # Instructions
-    st.markdown("""
-    Upload your resume by either:
-    1. Pasting the text below, or
-    2. Using our sample resume to test the app
-    """)
-    
-    # Create two columns
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # Text input area
-        st.markdown("### 📝 Paste Your Resume Text")
-        resume_input = st.text_area(
-            "Copy and paste your resume here:",
-            height=400,
-            placeholder="""Paste your resume here...
-
-Example format:
-John Doe
-Data Scientist
-
-Skills: Python, SQL, Machine Learning, TensorFlow...
-
-Experience:
-- Data Scientist at Company X
-- Used Python and SQL for data analysis...
-
-Education:
-- BS Computer Science..."""
-        )
-        
-        # Analyze button
-        if st.button("🔍 Analyze Resume", type="primary", use_container_width=True):
-            if resume_input:
-                # Extract skills
-                skills = extract_skills(resume_input)
-                
-                # Save to session state
-                st.session_state.resume_text = resume_input
-                st.session_state.resume_skills = skills
-                
-                # Show success message
-                st.success(f"✅ Resume analyzed successfully! Found {len(skills)} skills.")
-                
-                # Display found skills
-                if skills:
-                    st.markdown("### 🛠️ Skills We Found:")
-                    skills_html = ""
-                    for skill in skills:
-                        skills_html += f'<span class="skill-badge success-badge">{skill}</span>'
-                    st.markdown(skills_html, unsafe_allow_html=True)
-                    
-                    # Suggest next step
-                    st.info("👉 Go to **'Find Jobs'** page to see matching positions!")
-                else:
-                    st.warning("No technical skills detected. Make sure to include programming languages, tools, and technologies.")
-            else:
-                st.error("Please paste your resume text first!")
-    
-    with col2:
-        # Sample resume option
-        st.markdown("### 🎯 Quick Start")
-        st.markdown("Don't have your resume ready? Try our sample!")
-        
-        if st.button("📋 Use Sample Resume", use_container_width=True):
-            sample_resume = """
-John Doe
-Data Scientist | 3 Years Experience
-
-SKILLS:
-• Programming: Python, R, SQL, Java
-• Machine Learning: TensorFlow, PyTorch, Scikit-learn
-• Data Analysis: Pandas, NumPy, Statistical Analysis
-• Visualization: Tableau, Matplotlib, Power BI
-• Cloud: AWS, Docker, Kubernetes
-• Databases: MongoDB, PostgreSQL, Redis
-• Big Data: Spark, Hadoop, Kafka
-• Tools: Git, Jupyter, Agile, Excel
-
-EXPERIENCE:
-Data Scientist - Tech Company (2021-Present)
-• Developed machine learning models using Python and TensorFlow
-• Performed data analysis and created visualizations with Tableau
-• Worked with AWS for model deployment
-• Used SQL for database queries and data extraction
-
-Junior Data Analyst - StartupXYZ (2020-2021)  
-• Data analysis using Python, Pandas, and NumPy
-• Created dashboards in Power BI
-• Statistical analysis and A/B testing
-• Collaborated using Agile methodology
-
-EDUCATION:
-Bachelor of Science in Computer Science
-Focus on Machine Learning and Data Science
-Courses: Statistics, Deep Learning, NLP, Computer Vision
-
-PROJECTS:
-• Customer Churn Prediction using Machine Learning
-• Real-time Data Pipeline with Kafka and Spark
-• Docker containerization for ML model deployment
-"""
-            # Set the sample resume
-            st.session_state.resume_text = sample_resume
-            st.session_state.resume_skills = extract_skills(sample_resume)
-            
-            st.success("✅ Sample resume loaded! Check your skills in the sidebar.")
-            st.balloons()  # Fun animation!
-            
-        st.markdown("---")
-        
-        # Tips section
-        st.markdown("### 💡 Tips for Best Results")
-        st.markdown("""
-        Include these in your resume:
-        - **Languages:** Python, R, SQL, Java
-        - **ML/AI:** TensorFlow, PyTorch, Scikit-learn
-        - **Tools:** Docker, Git, Jupyter
-        - **Cloud:** AWS, Azure, GCP
-        - **Databases:** MongoDB, PostgreSQL
-        """)
-
-def find_jobs_page():
-    """Page for finding jobs"""
-    st.header("🔍 Find Jobs")
-    
-    if not st.session_state.resume_skills:
-        st.warning("⚠️ Please upload your resume first to get personalized matches!")
-        if st.button("Go to Upload Resume"):
-            st.session_state.page = "Upload Resume"
-            st.rerun()
-        return
-    
-    # Get all jobs
-    jobs = get_sample_jobs()
-    
-    # Filter options
-    st.markdown("### 🎯 Filter Jobs")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        job_type = st.selectbox("Job Type", ["All", "Full-time", "Co-op", "Internship", "Remote"])
-    
-    with col2:
-        experience = st.selectbox("Experience Level", ["All", "Entry Level", "Mid Level", "Senior"])
-    
-    with col3:
-        sort_by = st.selectbox("Sort By", ["Best Match", "Most Recent", "Salary"])
-    
-    # Calculate matches for all jobs
-    job_matches = []
     for job in jobs:
-        score, matched_skills, missing_skills = calculate_match_score(
-            st.session_state.resume_skills,
-            job
-        )
+        description = job.get('description', '') + ' ' + job.get('title', '')
+        score, matched, required = calculate_match_score(user_skills, description)
+        
         job['match_score'] = score
-        job['matched_skills'] = matched_skills
-        job['missing_skills'] = missing_skills
-        job_matches.append(job)
+        job['matched_skills'] = matched
+        job['required_skills'] = required
+        ranked_jobs.append(job)
     
-    # Sort by match score
-    job_matches.sort(key=lambda x: x['match_score'], reverse=True)
-    
-    # Display jobs
-    st.markdown("### 💼 Available Positions")
-    
-    for job in job_matches:
-        # Create an expander for each job
-        match_emoji = "🟢" if job['match_score'] >= 70 else "🟡" if job['match_score'] >= 40 else "🔴"
-        
-        with st.expander(f"{match_emoji} {job['title']} - {job['company']} ({job['match_score']:.0f}% match)"):
-            # Job header info
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Match Score", f"{job['match_score']:.0f}%")
-            with col2:
-                st.metric("Salary", job['salary'])
-            with col3:
-                st.metric("Experience", job['experience'])
-            with col4:
-                st.metric("Posted", job['posted'])
-            
-            # Job details
-            st.markdown(f"**📍 Location:** {job['location']}")
-            st.markdown(f"**💼 Type:** {job['type']}")
-            st.markdown(f"**📝 Description:** {job['description']}")
-            
-            # Skills section
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                st.markdown("**✅ Your Matching Skills:**")
-                if job['matched_skills']:
-                    for skill in job['matched_skills']:
-                        st.write(f"• {skill}")
-                else:
-                    st.write("No direct matches")
-            
-            with col_b:
-                st.markdown("**📚 Skills to Learn:**")
-                if job['missing_skills']:
-                    for skill in job['missing_skills']:
-                        st.write(f"• {skill}")
-                else:
-                    st.write("You have all required skills! 🎉")
-            
-            # Action buttons
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.button(f"💾 Save Job", key=f"save_{job['id']}")
-            with col2:
-                st.button(f"📧 Apply Now", key=f"apply_{job['id']}")
-            with col3:
-                st.button(f"📊 See Details", key=f"details_{job['id']}")
+    return sorted(ranked_jobs, key=lambda x: x['match_score'], reverse=True)
 
-def my_matches_page():
-    """Page showing best matches"""
-    st.header("🎯 My Best Matches")
+# ==================== SKILL GAP ANALYSIS ====================
+def analyze_skill_gaps(user_skills, top_jobs):
+    """Identify missing skills and prioritize them"""
+    all_job_skills = set()
+    skill_frequency = Counter()
     
-    if not st.session_state.resume_skills:
-        st.warning("⚠️ Please upload your resume first!")
-        return
+    for job in top_jobs[:10]:  # Analyze top 10 jobs
+        description = job.get('description', '') + ' ' + job.get('title', '')
+        _, job_skills = extract_skills(description)
+        all_job_skills.update(job_skills)
+        skill_frequency.update(job_skills)
     
-    # Get jobs and calculate matches
-    jobs = get_sample_jobs()
-    job_matches = []
+    missing_skills = all_job_skills - user_skills
     
-    for job in jobs:
-        score, matched_skills, missing_skills = calculate_match_score(
-            st.session_state.resume_skills,
-            job
-        )
-        if score >= 50:  # Only show good matches
-            job['match_score'] = score
-            job['matched_skills'] = matched_skills
-            job['missing_skills'] = missing_skills
-            job_matches.append(job)
+    # Prioritize by frequency
+    priority_skills = [
+        {
+            'skill': skill,
+            'frequency': skill_frequency[skill],
+            'priority': 'High' if skill_frequency[skill] >= 5 else 'Medium' if skill_frequency[skill] >= 3 else 'Low'
+        }
+        for skill in missing_skills
+    ]
     
-    # Sort by match score
-    job_matches.sort(key=lambda x: x['match_score'], reverse=True)
-    
-    if job_matches:
-        # Summary metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Best Match", f"{job_matches[0]['match_score']:.0f}%")
-        with col2:
-            st.metric("Good Matches (>70%)", sum(1 for j in job_matches if j['match_score'] >= 70))
-        with col3:
-            st.metric("Total Matches", len(job_matches))
-        
-        # Top 3 recommendations
-        st.markdown("### 🏆 Top 3 Recommendations")
-        
-        for i, job in enumerate(job_matches[:3], 1):
-            # Create card-like display
-            st.markdown(f"""
-            <div class="job-card">
-                <h4>#{i} {job['title']}</h4>
-                <p><strong>{job['company']}</strong> | {job['location']}</p>
-                <p>Match Score: {job['match_score']:.0f}% | {job['salary']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Quick apply button
-            st.button(f"Quick Apply to {job['company']}", key=f"quick_{job['id']}")
-    else:
-        st.info("No strong matches found. Try adding more skills to your resume!")
+    return sorted(priority_skills, key=lambda x: x['frequency'], reverse=True)
 
-def skills_analysis_page():
-    """Page for skills analysis"""
-    st.header("📊 Skills Analysis")
-    
-    # Market demand data
-    in_demand_skills = {
-        'Python': 95,
-        'SQL': 88,
-        'Machine Learning': 82,
-        'AWS': 78,
-        'Docker': 72,
-        'Tableau': 68,
-        'Statistics': 65,
-        'Git': 60,
-        'Agile': 55,
-        'Excel': 50
-    }
-    
-    # Your skills vs market
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 📈 Most In-Demand Skills")
-        
-        # Create DataFrame for chart
-        df = pd.DataFrame(
-            list(in_demand_skills.items()),
-            columns=['Skill', 'Demand Score']
-        )
-        
-        # Bar chart
-        st.bar_chart(df.set_index('Skill'))
-        
-    with col2:
-        st.markdown("### 🎯 Your Skills Match")
-        
-        if st.session_state.resume_skills:
-            your_skills = st.session_state.resume_skills
-            
-            # Check which in-demand skills you have
-            have = []
-            dont_have = []
-            
-            for skill in in_demand_skills.keys():
-                if skill.lower() in [s.lower() for s in your_skills]:
-                    have.append(skill)
-                else:
-                    dont_have.append(skill)
-            
-            st.markdown("**✅ Skills You Have:**")
-            for skill in have:
-                st.write(f"• {skill}")
-            
-            if dont_have:
-                st.markdown("**📚 Skills to Learn:**")
-                for skill in dont_have[:5]:  # Show top 5
-                    st.write(f"• {skill}")
-        else:
-            st.info("Upload your resume to see personalized recommendations!")
-    
-    # Learning resources
-    st.markdown("### 📚 Learning Resources")
-    
+def get_learning_resources(skill):
+    """Suggest learning resources for skills"""
     resources = {
-        "Python": "https://www.python.org/about/gettingstarted/",
-        "SQL": "https://www.w3schools.com/sql/",
-        "Machine Learning": "https://www.coursera.org/learn/machine-learning",
-        "AWS": "https://aws.amazon.com/training/",
-        "Docker": "https://docs.docker.com/get-started/"
+        'python': ['Python.org Tutorial', 'Coursera Python Specialization', 'LeetCode Python'],
+        'machine learning': ['Coursera ML by Andrew Ng', 'Fast.ai', 'Kaggle Learn'],
+        'sql': ['SQLZoo', 'Mode SQL Tutorial', 'LeetCode Database'],
+        'docker': ['Docker Official Docs', 'Docker for Beginners', 'KodeKloud Docker'],
+        'aws': ['AWS Free Tier', 'A Cloud Guru', 'AWS Certified Solutions Architect'],
     }
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Online Courses**")
-        st.write("• Coursera")
-        st.write("• Udemy")
-        st.write("• edX")
-    
-    with col2:
-        st.markdown("**Practice Platforms**")
-        st.write("• Kaggle")
-        st.write("• LeetCode")
-        st.write("• HackerRank")
-    
-    with col3:
-        st.markdown("**Documentation**")
-        for skill, link in list(resources.items())[:3]:
-            st.write(f"• [{skill}]({link})")
+    return resources.get(skill.lower(), ['Google Search', 'YouTube Tutorials', 'Official Documentation'])
 
-# Run the app
+# ==================== VISUALIZATIONS ====================
+def create_skill_distribution_chart(user_skills_dict):
+    """Create skill distribution pie chart"""
+    categories = []
+    counts = []
+    
+    for category, skills in user_skills_dict.items():
+        if skills:
+            categories.append(category)
+            counts.append(len(skills))
+    
+    fig = px.pie(
+        values=counts,
+        names=categories,
+        title='Your Skills Distribution',
+        color_discrete_sequence=px.colors.sequential.Purples
+    )
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    return fig
+
+def create_match_score_chart(jobs):
+    """Create match score distribution chart"""
+    if not jobs:
+        return None
+    
+    df = pd.DataFrame(jobs[:20])  # Top 20 jobs
+    
+    fig = px.bar(
+        df,
+        x='title',
+        y='match_score',
+        title='Top 20 Job Matches',
+        labels={'match_score': 'Match Score (%)', 'title': 'Job Title'},
+        color='match_score',
+        color_continuous_scale='Purples'
+    )
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def create_skill_gap_chart(skill_gaps):
+    """Create skill gap priority chart"""
+    if not skill_gaps:
+        return None
+    
+    df = pd.DataFrame(skill_gaps[:15])  # Top 15 missing skills
+    
+    fig = px.bar(
+        df,
+        x='skill',
+        y='frequency',
+        title='Top Missing Skills (by frequency in job postings)',
+        labels={'frequency': 'Frequency', 'skill': 'Skill'},
+        color='priority',
+        color_discrete_map={'High': '#764ba2', 'Medium': '#667eea', 'Low': '#a8b3ff'}
+    )
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+def create_salary_insights(jobs):
+    """Create salary insights visualization"""
+    salaries = []
+    titles = []
+    
+    for job in jobs[:20]:
+        salary_str = job.get('salary', '')
+        if salary_str and '$' in salary_str:
+            try:
+                # Extract numeric values
+                numbers = re.findall(r'\d+', salary_str.replace(',', ''))
+                if len(numbers) >= 2:
+                    avg_salary = (int(numbers[0]) + int(numbers[1])) / 2
+                    salaries.append(avg_salary)
+                    titles.append(job['title'][:30])
+            except:
+                pass
+    
+    if not salaries:
+        return None
+    
+    df = pd.DataFrame({'Job Title': titles, 'Average Salary': salaries})
+    
+    fig = px.bar(
+        df,
+        x='Job Title',
+        y='Average Salary',
+        title='Salary Insights for Matched Jobs',
+        labels={'Average Salary': 'Average Salary ($)'},
+        color='Average Salary',
+        color_continuous_scale='Purples'
+    )
+    fig.update_layout(xaxis_tickangle=-45)
+    return fig
+
+# ==================== EXPORT FEATURES ====================
+def generate_csv_report(jobs, user_skills):
+    """Generate CSV report of job matches"""
+    if not jobs:
+        return None
+    
+    df = pd.DataFrame(jobs)
+    df = df[['title', 'company', 'location', 'match_score', 'salary', 'url', 'source']]
+    return df.to_csv(index=False)
+
+def generate_detailed_report(jobs, user_skills, skill_gaps):
+    """Generate detailed text report"""
+    report = f"""
+# AI RESUME MATCHER - DETAILED REPORT
+Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## YOUR SKILLS ({len(user_skills)})
+{', '.join(sorted(user_skills))}
+
+## TOP JOB MATCHES
+"""
+    
+    for i, job in enumerate(jobs[:10], 1):
+        report += f"""
+### {i}. {job['title']} at {job['company']}
+- Match Score: {job['match_score']}%
+- Location: {job['location']}
+- Salary: {job['salary']}
+- Skills Matched: {job['matched_skills']}/{job['required_skills']}
+- URL: {job['url']}
+
+"""
+    
+    report += f"""
+## SKILL GAP ANALYSIS
+Missing skills to improve your matches:
+"""
+    
+    for gap in skill_gaps[:10]:
+        report += f"- {gap['skill'].title()} (Priority: {gap['priority']}, Frequency: {gap['frequency']})\n"
+    
+    return report
+
+# ==================== MAIN APP ====================
+def main():
+    st.markdown('<div class="main-header">🎯 AI-Powered Resume Matcher</div>', unsafe_allow_html=True)
+    st.markdown("### Match your resume with perfect job opportunities using AI")
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ Settings")
+        
+        search_role = st.selectbox(
+            "Target Role",
+            ["data scientist", "data engineer", "data analyst", "software engineer", "machine learning"]
+        )
+        
+        min_match_score = st.slider("Minimum Match Score (%)", 0, 100, 50)
+        
+        st.markdown("---")
+        st.markdown("### 📊 Quick Stats")
+        if st.session_state.jobs:
+            st.metric("Total Jobs Found", len(st.session_state.jobs))
+            st.metric("Your Skills", len(st.session_state.user_skills))
+            avg_score = sum(j.get('match_score', 0) for j in st.session_state.jobs) / len(st.session_state.jobs)
+            st.metric("Avg Match Score", f"{avg_score:.1f}%")
+    
+    # Main content tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📄 Resume Upload", 
+        "💼 Job Matches", 
+        "📊 Analytics", 
+        "🎯 Skill Gap", 
+        "📥 Export"
+    ])
+    
+    # TAB 1: RESUME UPLOAD
+    with tab1:
+        st.header("Upload Your Resume")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            resume_text = st.text_area(
+                "Paste your resume text here:",
+                height=300,
+                placeholder="Copy and paste your resume text here..."
+            )
+            
+            if st.button("🔍 Analyze Resume", type="primary"):
+                if resume_text:
+                    st.session_state.resume_text = resume_text
+                    skill_dict, skills = extract_skills(resume_text)
+                    st.session_state.user_skills = skills
+                    
+                    # CLEAR OLD JOB RESULTS when new resume is uploaded
+                    st.session_state.jobs = []
+                    
+                    st.success(f"✅ Found {len(skills)} skills in your resume!")
+                    st.info("💡 Now go to 'Job Matches' tab to find new jobs for this resume!")
+                    
+                    # Display skills by category
+                    st.subheader("Detected Skills")
+                    for category, cat_skills in skill_dict.items():
+                        if cat_skills:
+                            st.markdown(f"**{category}:**")
+                            st.markdown(" ".join([f'<span class="skill-badge">{skill}</span>' 
+                                                 for skill in cat_skills]), 
+                                      unsafe_allow_html=True)
+                else:
+                    st.error("Please paste your resume text first!")
+        
+        with col2:
+            st.info("""
+            **💡 Tips for best results:**
+            - Include all your technical skills
+            - Mention programming languages
+            - Add frameworks and tools
+            - Include soft skills
+            - Mention certifications
+            """)
+            
+            if st.button("📝 Use Sample Resume"):
+                sample_resume = """
+                Data Scientist with 2 years of experience in machine learning and data analysis.
+                
+                Skills: Python, SQL, Machine Learning, TensorFlow, Pandas, NumPy, Scikit-learn,
+                Data Visualization, Tableau, Power BI, Statistical Analysis, A/B Testing,
+                Git, Docker, AWS, Communication, Teamwork, Problem Solving
+                
+                Experience with building predictive models, ETL pipelines, and data dashboards.
+                Strong analytical and communication skills.
+                """
+                st.session_state.resume_text = sample_resume
+                skill_dict, skills = extract_skills(sample_resume)
+                st.session_state.user_skills = skills
+                
+                # CLEAR OLD JOB RESULTS when sample resume is loaded
+                st.session_state.jobs = []
+                
+                st.success("Sample resume loaded! Click 'Analyze Resume' to see extracted skills.")
+                st.rerun()
+    
+    # TAB 2: JOB MATCHES
+    with tab2:
+        st.header("Job Matches")
+        
+        if not st.session_state.user_skills:
+            st.warning("⚠️ Please upload your resume first in the 'Resume Upload' tab!")
+        else:
+            # Show warning if no jobs fetched yet
+            if not st.session_state.jobs:
+                st.info("👇 Click the button below to fetch jobs matching your resume!")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                if st.button("🔎 Find Matching Jobs", type="primary"):
+                    jobs = fetch_all_jobs(search_role)
+                    
+                    if jobs:
+                        ranked_jobs = rank_jobs(jobs, st.session_state.user_skills)
+                        st.session_state.jobs = ranked_jobs
+                        st.success(f"✅ Found {len(jobs)} jobs matching your skills!")
+                        st.rerun()
+                    else:
+                        st.error("No jobs found. Try a different search term.")
+            
+            with col2:
+                if st.session_state.jobs:
+                    st.metric("Jobs Found", len(st.session_state.jobs))
+            
+            # Display jobs
+            if st.session_state.jobs:
+                filtered_jobs = [j for j in st.session_state.jobs if j['match_score'] >= min_match_score]
+                
+                st.subheader(f"Top Matches ({len(filtered_jobs)} jobs)")
+                
+                for i, job in enumerate(filtered_jobs[:20], 1):
+                    with st.expander(f"#{i} - {job['title']} at {job['company']} - {job['match_score']}% Match"):
+                        col1, col2, col3 = st.columns([2, 2, 1])
+                        
+                        with col1:
+                            st.markdown(f"**Company:** {job['company']}")
+                            st.markdown(f"**Location:** {job['location']}")
+                            st.markdown(f"**Posted:** {job['posted_date']}")
+                        
+                        with col2:
+                            st.markdown(f"**Salary:** {job['salary']}")
+                            st.markdown(f"**Source:** {job['source']}")
+                            st.markdown(f"**Skills Match:** {job['matched_skills']}/{job['required_skills']}")
+                        
+                        with col3:
+                            st.markdown(f'<div class="match-score">{job["match_score"]}%</div>', 
+                                      unsafe_allow_html=True)
+                        
+                        st.markdown("**Description:**")
+                        st.write(job['description'][:300] + "...")
+                        
+                        st.markdown(f"[🔗 View Job]({job['url']})")
+    
+    # TAB 3: ANALYTICS
+    with tab3:
+        st.header("Analytics Dashboard")
+        
+        if not st.session_state.user_skills:
+            st.warning("⚠️ Please upload your resume first!")
+        elif not st.session_state.jobs:
+            st.warning("⚠️ Please find matching jobs first!")
+        else:
+            # Skills distribution
+            skill_dict, _ = extract_skills(st.session_state.resume_text)
+            fig1 = create_skill_distribution_chart(skill_dict)
+            st.plotly_chart(fig1, use_container_width=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Match score chart
+                fig2 = create_match_score_chart(st.session_state.jobs)
+                if fig2:
+                    st.plotly_chart(fig2, use_container_width=True)
+            
+            with col2:
+                # Salary insights
+                fig4 = create_salary_insights(st.session_state.jobs)
+                if fig4:
+                    st.plotly_chart(fig4, use_container_width=True)
+    
+    # TAB 4: SKILL GAP
+    with tab4:
+        st.header("Skill Gap Analysis")
+        
+        if not st.session_state.user_skills or not st.session_state.jobs:
+            st.warning("⚠️ Please upload your resume and find jobs first!")
+        else:
+            skill_gaps = analyze_skill_gaps(st.session_state.user_skills, st.session_state.jobs)
+            
+            if skill_gaps:
+                # Visualization
+                fig3 = create_skill_gap_chart(skill_gaps)
+                if fig3:
+                    st.plotly_chart(fig3, use_container_width=True)
+                
+                st.subheader("🎯 Skills to Learn")
+                st.markdown("These skills appear frequently in your matched jobs but are missing from your resume:")
+                
+                for gap in skill_gaps[:10]:
+                    with st.expander(f"**{gap['skill'].title()}** - {gap['priority']} Priority (appears in {gap['frequency']} jobs)"):
+                        st.markdown(f"**Priority Level:** {gap['priority']}")
+                        st.markdown(f"**Frequency:** Found in {gap['frequency']} job postings")
+                        
+                        st.markdown("**📚 Recommended Learning Resources:**")
+                        resources = get_learning_resources(gap['skill'])
+                        for resource in resources:
+                            st.markdown(f"- {resource}")
+            else:
+                st.success("🎉 Great! You have all the major skills needed for these positions!")
+    
+    # TAB 5: EXPORT
+    with tab5:
+        st.header("Export Reports")
+        
+        if not st.session_state.jobs:
+            st.warning("⚠️ Please find matching jobs first!")
+        else:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("📊 CSV Export")
+                csv_data = generate_csv_report(st.session_state.jobs, st.session_state.user_skills)
+                if csv_data:
+                    st.download_button(
+                        label="📥 Download Jobs CSV",
+                        data=csv_data,
+                        file_name=f"job_matches_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+            
+            with col2:
+                st.subheader("📄 Detailed Report")
+                skill_gaps = analyze_skill_gaps(st.session_state.user_skills, st.session_state.jobs)
+                report_data = generate_detailed_report(
+                    st.session_state.jobs, 
+                    st.session_state.user_skills,
+                    skill_gaps
+                )
+                st.download_button(
+                    label="📥 Download Full Report",
+                    data=report_data,
+                    file_name=f"resume_analysis_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain"
+                )
+            
+            st.markdown("---")
+            st.subheader("📧 Email Report")
+            email = st.text_input("Enter your email to receive the report:")
+            if st.button("Send Report"):
+                if email:
+                    st.success(f"📧 Report will be sent to {email} (Email functionality to be implemented)")
+                else:
+                    st.error("Please enter an email address")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666;'>
+        Built with ❤️ using Streamlit | AI Resume Matcher v2.0
+    </div>
+    """, unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
