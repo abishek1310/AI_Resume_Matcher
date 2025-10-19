@@ -63,12 +63,21 @@ if 'user_skills' not in st.session_state:
 # ==================== SKILL EXTRACTION ====================
 def extract_skills(text):
     """Extract skills from text using comprehensive skill database"""
+    import re
     text_lower = text.lower()
     
     skill_categories = {
         'Programming Languages': [
             'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'ruby', 
-            'go', 'rust', 'swift', 'kotlin', 'php', 'scala', 'r', 'matlab'
+            'go', 'rust', 'swift', 'kotlin', 'php', 'scala', 'r programming', 'r language', 'matlab'
+        ],
+        'Electronics & Hardware': [
+            'digital circuit design', 'analog electronics', 'embedded systems', 
+            'vlsi', 'microprocessors', 'microcontrollers', '8051', 'arm', 'avr', 'pic',
+            'fpga', 'verilog', 'vhdl', 'pcb design', 'kicad', 'altium', 'eagle',
+            'power electronics', 'signal conditioning', 'hardware debugging', 
+            'circuit design', 'schematic design', 'embedded c', 'rtos',
+            'iot', 'raspberry pi', 'arduino', 'pcb layout'
         ],
         'Data Science & ML': [
             'machine learning', 'deep learning', 'neural networks', 'nlp', 
@@ -81,8 +90,9 @@ def extract_skills(text):
             'snowflake', 'bigquery', 'redshift'
         ],
         'Cloud & DevOps': [
-            'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'ci/cd', 'jenkins',
-            'terraform', 'ansible', 'linux', 'bash', 'git', 'github'
+            'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'ci/cd', 
+            'jenkins', 'terraform', 'ansible', 'linux', 'bash', 'git version control', 
+            'github', 'gitlab', 'devops'
         ],
         'Web Development': [
             'react', 'angular', 'vue', 'node.js', 'express', 'django', 'flask',
@@ -103,7 +113,10 @@ def extract_skills(text):
     
     for category, skills in skill_categories.items():
         for skill in skills:
-            if skill in text_lower:
+            # Use word boundary matching to avoid false positives
+            # \b matches word boundaries (spaces, punctuation, start/end of string)
+            pattern = r'\b' + re.escape(skill) + r'\b'
+            if re.search(pattern, text_lower):
                 found_skills[category].append(skill)
                 all_skills.add(skill)
     
