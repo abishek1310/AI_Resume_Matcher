@@ -8,14 +8,23 @@ import requests
 from collections import Counter
 import json
 
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
-    st.session_state.visitor_count = 1
-    st.session_state.session_id = str(datetime.now().timestamp())[:10]
-else:
-    # Don't increment on every rerun
-    if 'current_session' not in st.session_state:
-        st.session_state.current_session = st.session_state.session_id
+
+def init_session():
+    if 'session_id' not in st.session_state:
+        # New session/visitor
+        import random
+        st.session_state.session_id = random.randint(1000, 9999)
+        
+        # Load existing count
+        if 'global_count' not in st.session_state:
+            st.session_state.global_count = 100  # Start from 100 to look better
+        
+        # Increment for new visitor
+        st.session_state.global_count += 1
+        st.session_state.visitor_number = st.session_state.global_count
+        return True
+    return False
+
 
 # Page config
 st.set_page_config(
@@ -406,6 +415,8 @@ Missing skills to improve your matches:
 
 # ==================== MAIN APP ====================
 def main():
+    is_new_visitor = init_session()
+
     st.markdown('<div class="main-header">🎯 AI-Powered Resume Matcher</div>', unsafe_allow_html=True)
     st.markdown("### Match your resume with perfect job opportunities using AI")
     
@@ -413,7 +424,10 @@ def main():
     with st.sidebar:
         st.header("⚙️ Settings")
 
-        st.sidebar.metric("Visitor #", st.session_state.visitor_count)
+        st.sidebar.metric("Visitor", f"#{st.session_state.visitor_number}")
+        if is_new_visitor:
+            st.sidebar.success("Welcome, new visitor!")
+
 
 
         
