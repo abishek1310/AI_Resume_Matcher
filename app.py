@@ -8,24 +8,6 @@ import requests
 from collections import Counter
 import json
 
-
-def init_session():
-    if 'session_id' not in st.session_state:
-        # New session/visitor
-        import random
-        st.session_state.session_id = random.randint(1000, 9999)
-        
-        # Load existing count
-        if 'global_count' not in st.session_state:
-            st.session_state.global_count = 100  # Start from 100 to look better
-        
-        # Increment for new visitor
-        st.session_state.global_count += 1
-        st.session_state.visitor_number = st.session_state.global_count
-        return True
-    return False
-
-
 # Page config
 st.set_page_config(
     page_title="AI Resume Matcher",
@@ -128,6 +110,118 @@ def extract_skills(text):
     return found_skills, all_skills
 
 # ==================== JOB API INTEGRATIONS ====================
+def get_fallback_jobs(search_term="data"):
+    """Fallback sample jobs when API is unavailable"""
+    sample_jobs = [
+        {
+            'title': 'Data Scientist',
+            'company': 'Tech Corp',
+            'location': 'Remote',
+            'description': 'Seeking data scientist with Python, machine learning, SQL, and TensorFlow experience. Work on predictive models and data pipelines.',
+            'salary': '$80,000 - $120,000',
+            'url': 'https://example.com/job1',
+            'posted_date': '2 days ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Senior Data Engineer',
+            'company': 'DataFlow Inc',
+            'location': 'Boston, MA',
+            'description': 'Data engineer needed for building ETL pipelines with Spark, Airflow, Python, and AWS. Experience with real-time data processing.',
+            'salary': '$100,000 - $150,000',
+            'url': 'https://example.com/job2',
+            'posted_date': '1 week ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Machine Learning Engineer',
+            'company': 'AI Solutions',
+            'location': 'Remote',
+            'description': 'ML engineer to develop and deploy models using PyTorch, TensorFlow, Docker, and Kubernetes. Strong Python skills required.',
+            'salary': '$110,000 - $160,000',
+            'url': 'https://example.com/job3',
+            'posted_date': '3 days ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Data Analyst',
+            'company': 'Analytics Plus',
+            'location': 'New York, NY',
+            'description': 'Analyst role focusing on SQL, Tableau, Power BI, Excel, and statistical analysis. Create dashboards and reports.',
+            'salary': '$65,000 - $90,000',
+            'url': 'https://example.com/job4',
+            'posted_date': '5 days ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Junior Data Scientist',
+            'company': 'StartUp Labs',
+            'location': 'Remote',
+            'description': 'Entry-level data scientist position. Python, Pandas, Scikit-learn, and SQL required. Machine learning knowledge preferred.',
+            'salary': '$60,000 - $85,000',
+            'url': 'https://example.com/job5',
+            'posted_date': '1 day ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Lead Data Engineer',
+            'company': 'Big Data Corp',
+            'location': 'San Francisco, CA',
+            'description': 'Leading data engineering team. Expertise in Spark, Kafka, Python, AWS, and data architecture required.',
+            'salary': '$140,000 - $180,000',
+            'url': 'https://example.com/job6',
+            'posted_date': '1 week ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'BI Developer',
+            'company': 'Enterprise Solutions',
+            'location': 'Chicago, IL',
+            'description': 'Business Intelligence developer using Tableau, Power BI, SQL, and Python. Create executive dashboards.',
+            'salary': '$75,000 - $105,000',
+            'url': 'https://example.com/job7',
+            'posted_date': '4 days ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Research Scientist - ML',
+            'company': 'Research Lab',
+            'location': 'Remote',
+            'description': 'Research role in machine learning and deep learning. PhD preferred. PyTorch, TensorFlow, NLP experience.',
+            'salary': '$120,000 - $170,000',
+            'url': 'https://example.com/job8',
+            'posted_date': '2 weeks ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Data Platform Engineer',
+            'company': 'Cloud Systems',
+            'location': 'Seattle, WA',
+            'description': 'Building scalable data platforms with Kubernetes, Docker, Python, and cloud services (AWS/GCP/Azure).',
+            'salary': '$115,000 - $155,000',
+            'url': 'https://example.com/job9',
+            'posted_date': '6 days ago',
+            'source': 'Sample Data'
+        },
+        {
+            'title': 'Analytics Engineer',
+            'company': 'Data Insights',
+            'location': 'Austin, TX',
+            'description': 'Analytics engineering role. SQL, Python, dbt, and data modeling. Build data transformation pipelines.',
+            'salary': '$85,000 - $120,000',
+            'url': 'https://example.com/job10',
+            'posted_date': '3 days ago',
+            'source': 'Sample Data'
+        }
+    ]
+    
+    # Filter by search term
+    filtered = [job for job in sample_jobs 
+                if search_term.lower() in job['title'].lower() 
+                or search_term.lower() in job['description'].lower()]
+    
+    return filtered if filtered else sample_jobs[:5]
+
 def fetch_remoteok_jobs(search_term="data"):
     """Fetch jobs from RemoteOK API"""
     try:
@@ -153,11 +247,20 @@ def fetch_remoteok_jobs(search_term="data"):
                         'source': 'RemoteOK'
                     })
             
+            # If no jobs match search term, return fallback
+            if not processed_jobs:
+                st.info(f"No exact matches for '{search_term}' from RemoteOK. Using sample data.")
+                return get_fallback_jobs(search_term)
+            
             return processed_jobs
-        return []
+        
+        # If API fails, return fallback
+        st.warning("RemoteOK API unavailable. Using sample data.")
+        return get_fallback_jobs(search_term)
+        
     except Exception as e:
-        st.warning(f"RemoteOK API error: {str(e)}")
-        return []
+        st.warning(f"RemoteOK API error: {str(e)}. Using sample data.")
+        return get_fallback_jobs(search_term)
 
 def fetch_github_jobs(search_term="data"):
     """Fetch jobs from GitHub Jobs API alternative"""
@@ -415,21 +518,12 @@ Missing skills to improve your matches:
 
 # ==================== MAIN APP ====================
 def main():
-    is_new_visitor = init_session()
-
     st.markdown('<div class="main-header">🎯 AI-Powered Resume Matcher</div>', unsafe_allow_html=True)
     st.markdown("### Match your resume with perfect job opportunities using AI")
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
-
-        st.sidebar.metric("Visitor", f"#{st.session_state.visitor_number}")
-        if is_new_visitor:
-            st.sidebar.success("Welcome, new visitor!")
-
-
-
         
         search_role = st.selectbox(
             "Target Role",
@@ -437,6 +531,13 @@ def main():
         )
         
         min_match_score = st.slider("Minimum Match Score (%)", 0, 100, 50)
+        
+        # Add Clear Results button
+        if st.session_state.jobs:
+            if st.button("🗑️ Clear Job Results", type="secondary"):
+                st.session_state.jobs = []
+                st.success("Job results cleared! Upload a new resume or search again.")
+                st.rerun()
         
         st.markdown("---")
         st.markdown("### 📊 Quick Stats")
