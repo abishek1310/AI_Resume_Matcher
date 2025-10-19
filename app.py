@@ -8,10 +8,14 @@ import requests
 from collections import Counter
 import json
 
-
-if 'visitor_count' not in st.session_state:
-    st.session_state.visitor_count = 0
-    st.session_state.visitor_count += 1
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    st.session_state.visitor_count = 1
+    st.session_state.session_id = str(datetime.now().timestamp())[:10]
+else:
+    # Don't increment on every rerun
+    if 'current_session' not in st.session_state:
+        st.session_state.current_session = st.session_state.session_id
 
 # Page config
 st.set_page_config(
@@ -409,7 +413,8 @@ def main():
     with st.sidebar:
         st.header("⚙️ Settings")
 
-        st.sidebar.metric("Visitors Today", st.session_state.visitor_count)
+        st.sidebar.metric("Visitor #", st.session_state.visitor_count)
+
 
         
         search_role = st.selectbox(
